@@ -1,0 +1,5 @@
+{
+  "experiment": "react-memory",
+  "max_rounds": 8,
+  "max_boundaries": 32
+}

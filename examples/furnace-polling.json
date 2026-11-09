@@ -1,0 +1,9 @@
+{
+  "experiment": "furnace-polling",
+  "scenario": {
+    "duration": 4,
+    "completion_before_subscribe": false,
+    "duplicate_notification": false,
+    "mutate_while_waiting": false
+  }
+}

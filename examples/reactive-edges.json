@@ -1,0 +1,9 @@
+{
+  "experiment": "furnace-reactive",
+  "scenario": {
+    "duration": 4,
+    "completion_before_subscribe": true,
+    "duplicate_notification": true,
+    "mutate_while_waiting": true
+  }
+}

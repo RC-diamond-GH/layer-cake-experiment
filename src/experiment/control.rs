@@ -1,0 +1,158 @@
+use super::{Experiment, ExperimentError};
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+use std::path::PathBuf;
+use tokio::sync::mpsc;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "operation", content = "value", rename_all = "snake_case")]
+pub enum ControlCommand {
+    Continue,
+    Step,
+    Pause,
+    Stop,
+    Input(Value),
+    Shutdown,
+}
+
+#[derive(Clone)]
+pub struct ControlHandle {
+    sender: mpsc::Sender<ControlCommand>,
+}
+impl ControlHandle {
+    pub async fn send(&self, command: ControlCommand) -> Result<(), ExperimentError> {
+        self.sender
+            .send(command)
+            .await
+            .map_err(|_| ExperimentError::Config("controller has closed".into()))
+    }
+}
+
+pub fn launch(
+    mut experiment: Experiment,
+    path: PathBuf,
+) -> (
+    ControlHandle,
+    mpsc::UnboundedReceiver<Value>,
+    tokio::task::JoinHandle<Result<(), ExperimentError>>,
+) {
+    let (sender, mut receiver) = mpsc::channel(32);
+    let (notifications, output) = mpsc::unbounded_channel();
+    let handle = tokio::spawn(async move {
+        let log = experiment.log.clone();
+        let run_id = log.data()?.id;
+        let stop_signal = experiment.stop_signal();
+        log.save(&path)?;
+        let mut running = false;
+        let mut single = false;
+        let mut pending = Vec::new();
+        loop {
+            if running && !experiment.finished {
+                let result = {
+                    let future = experiment.step();
+                    tokio::pin!(future);
+                    let mut channel_open = true;
+                    loop {
+                        tokio::select! {
+                            result = &mut future => break result,
+                            command = receiver.recv(), if channel_open => {
+                                let command = match command {
+                                    Some(command) => command,
+                                    None => { channel_open = false; ControlCommand::Shutdown }
+                                };
+                                let stopping = matches!(command,ControlCommand::Stop|ControlCommand::Shutdown);
+                                if stopping { stop_signal.store(true,std::sync::atomic::Ordering::Release); }
+                                let effective = if stopping { "before_next_dispatch" } else { "next_boundary" };
+                                let id = log.observe(&run_id,"control_requested",None,json!({"command":command,"effective":effective}))?;
+                                let _ = notifications.send(json!({"requested":command,"effective":effective,"record":id}));
+                                pending.push((command,id));
+                            }
+                        }
+                    }
+                };
+                if single {
+                    running = false;
+                    single = false;
+                }
+                match result {
+                    Ok(done) => {
+                        if done {
+                            running = false;
+                        }
+                    }
+                    Err(error) => {
+                        running = false;
+                        log.observe(
+                            &run_id,
+                            "controller_error",
+                            None,
+                            json!({"error":error.to_string(),"boundary":experiment.boundaries}),
+                        )?;
+                        let _ = notifications.send(json!({"error":error.to_string()}));
+                    }
+                }
+                log.save(&path)?;
+                let _ = notifications.send(json!({"state":experiment.state()}));
+            } else if pending.is_empty() {
+                let command = receiver.recv().await.unwrap_or(ControlCommand::Shutdown);
+                let id = log.observe(
+                    &run_id,
+                    "control_requested",
+                    None,
+                    json!({"command":command,"effective":"current_boundary"}),
+                )?;
+                pending.push((command, id));
+            }
+            for (command, request) in std::mem::take(&mut pending) {
+                let mut shutdown = false;
+                let applied: Result<(), ExperimentError> = match &command {
+                    ControlCommand::Continue | ControlCommand::Step if experiment.finished => {
+                        Err(ExperimentError::Config("run is terminal".into()))
+                    }
+                    ControlCommand::Continue => {
+                        running = true;
+                        single = false;
+                        Ok(())
+                    }
+                    ControlCommand::Step => {
+                        running = true;
+                        single = true;
+                        Ok(())
+                    }
+                    ControlCommand::Pause => {
+                        running = false;
+                        single = false;
+                        Ok(())
+                    }
+                    ControlCommand::Stop => {
+                        running = false;
+                        experiment.stop()
+                    }
+                    ControlCommand::Input(value) => experiment.input(value.clone(), Some(&request)),
+                    ControlCommand::Shutdown => {
+                        shutdown = true;
+                        if experiment.finished {
+                            Ok(())
+                        } else {
+                            experiment.stop()
+                        }
+                    }
+                };
+                let error = applied.err().map(|e| e.to_string());
+                let id = log.observe(&run_id,"control",Some(&request),json!({"command":command,"boundary":experiment.boundaries,"accepted":error.is_none(),"error":error}))?;
+                log.observe(
+                    &run_id,
+                    "controller_state",
+                    Some(&id),
+                    json!({"running":running,"state":experiment.state()}),
+                )?;
+                log.save(&path)?;
+                let _ = notifications.send(json!({"applied":command,"boundary":experiment.boundaries,"record":id,"error":error}));
+                if shutdown {
+                    return Ok(());
+                }
+            }
+        }
+    });
+    (ControlHandle { sender }, output, handle)
+}

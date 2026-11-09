@@ -1,0 +1,6 @@
+.lake/
+target/
+runs/
+docs/outdated/
+docs/stray/
+.env

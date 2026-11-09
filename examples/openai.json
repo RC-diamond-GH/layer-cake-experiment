@@ -1,0 +1,11 @@
+{
+  "experiment": "react-memory",
+  "model": {
+    "kind": "openai"
+  },
+  "generation": {
+    "temperature": 0.0,
+    "max_tokens": 393216
+  },
+  "max_rounds": 8
+}
