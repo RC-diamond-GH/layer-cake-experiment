@@ -4,3 +4,7 @@ runs/
 docs/outdated/
 docs/stray/
 .env
+.env.*
+.worktrees/
+__pycache__/
+*.py[cod]

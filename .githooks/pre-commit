@@ -1,0 +1,15 @@
+#!/bin/sh
+# Advisory local protection; required GitHub checks remain authoritative.
+branch=$(git symbolic-ref --quiet HEAD)
+status=$?
+if [ "$status" -gt 1 ]; then
+    printf '%s\n' 'Repository policy: cannot determine the current branch.' >&2
+    exit 1
+fi
+if [ "$branch" = 'refs/heads/main' ]; then
+    printf '%s\n' 'Repository policy: direct commits on main are forbidden; use a feature branch and pull request.' >&2
+    exit 1
+fi
+root=$(git rev-parse --show-toplevel) || exit 1
+cd "$root" || exit 1
+exec python3 scripts/check_repository.py --staged
