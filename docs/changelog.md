@@ -55,3 +55,7 @@ HTML 在 Chromium 实际打开，验证 77 条观测时间线、模型对象过�
 - 建立 `Repository policy`、`Rust`、`Lean` 三项 CI，固定工具链、第三方 action 提交和 Elan 下载校验值。
 - 将仓库设置与 main 保护保存为可复用 JSON，集成采用 squash merge；按开发者选择采用单账号模式，由服务器强制 PR 与必需检查，维护者依独立 AI 审阅证据决定合并。
 - 路径策略及 hooks 的 26 项隔离测试通过，actionlint v1.7.7 验证工作流语法通过。路径检查仅处理 Git 元数据与文件名，真实 `.env` 保持私有。
+
+### 3.1 CI action 运行时维护
+
+引导 PR 和合并后的 main CI 均通过，运行日志同时报告旧 action 的 Node 20 弃用提示。后续维护 PR 将 checkout 固定到 v7.0.1 提交、cache 固定到 v6.1.0 提交；两者的官方 action 定义均使用 Node 24。检查名称、权限、测试范围和 main 保护保持一致，维护变更通过受保护 PR 验证与集成。
