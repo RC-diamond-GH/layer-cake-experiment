@@ -1,0 +1,13 @@
+#!/bin/sh
+# Inspect destination refs, not local branch names (HEAD:main must also fail).
+status=0
+while read -r local_ref local_oid remote_ref remote_oid extra || [ -n "$local_ref$local_oid$remote_ref$remote_oid$extra" ]; do
+    if [ -z "$local_ref" ] || [ -z "$local_oid" ] || [ -z "$remote_ref" ] || [ -z "$remote_oid" ] || [ -n "$extra" ]; then
+        printf '%s\n' 'Repository policy: malformed pre-push ref update; refusing push.' >&2
+        status=1
+    elif [ "$remote_ref" = 'refs/heads/main' ]; then
+        printf '%s\n' 'Repository policy: direct pushes to main are forbidden; use a pull request.' >&2
+        status=1
+    fi
+done
+exit "$status"

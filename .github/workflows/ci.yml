@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  repository-policy:
+    name: Repository policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Test repository policy
+        run: python3 -m unittest discover -s scripts/tests
+      - name: Check tracked paths and protected changes
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            python3 scripts/check_repository.py --base "$PR_BASE_SHA"
+          else
+            python3 scripts/check_repository.py
+          fi
+
+  rust:
+    name: Rust
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install pinned Rust toolchain
+        # Keep this version aligned with rust-toolchain.toml.
+        run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt --no-self-update
+      - name: Cache Cargo dependencies
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+      - name: Test Rust targets with locked dependencies
+        run: cargo test --locked --all-targets
+
+  lean:
+    name: Lean
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install checksum-verified Elan 4.2.4
+        # Digest published by the v4.2.4 GitHub release API for this asset:
+        # https://api.github.com/repos/leanprover/elan/releases/assets/529114798
+        run: |
+          install_dir="$RUNNER_TEMP/elan-installer"
+          mkdir -p "$install_dir"
+          archive="$install_dir/elan.tar.gz"
+          curl --fail --silent --show-error --location --retry 3 \
+            --proto '=https' --tlsv1.2 \
+            https://github.com/leanprover/elan/releases/download/v4.2.4/elan-x86_64-unknown-linux-gnu.tar.gz \
+            --output "$archive"
+          echo "42b94d4244e8353142c456ec0e4ca6528fd898a6c604d4059f494e706e431f63  $archive" | sha256sum --check --strict
+          tar -xzf "$archive" -C "$install_dir"
+          "$install_dir/elan-init" -y --no-modify-path --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Install repository-pinned Lean toolchain
+        run: elan toolchain install "$(cat lean-toolchain)"
+      - name: Cache locked Lean dependencies
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .lake/packages
+          key: lean-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json', 'lakefile.toml') }}
+      - name: Fetch Mathlib compiled cache
+        run: lake exe cache get
+      - name: Build Lean project
+        run: lake build
+      - name: Ensure Lean dependency inputs stayed locked
+        run: git diff --exit-code -- lean-toolchain lake-manifest.json

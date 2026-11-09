@@ -5,6 +5,7 @@
 ## 第一部分：使用指南
 
 * [MVP 使用指南](usage.md)
+* [版本控制与协作](version-control.md)
 
 ## 第二部分：机制设计
 
