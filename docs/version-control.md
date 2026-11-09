@@ -22,9 +22,9 @@
 | Manager | 澄清问题、记录决策、确定单一变更范围与可观察验收标准，分派 Worker 和 Reviewer |
 | Worker | 在独立分支及 worktree 实现任务，提交实际验证证据并创建 PR |
 | Reviewer | 只读检查需求对应、接口语义、错误路径、性能及测试有效性，逐项记录发现与结论 |
-| 维护者 | 确认 CI、独立审批和讨论均完成，通过 squash merge 集成 |
+| 维护者 | 确认 CI、独立 AI 审阅证据和讨论均完成，通过 squash merge 集成 |
 
-CI 负责可执行检查；独立审阅负责设计与实现的对应关系。Agent 的独立审阅使用单独会话或 agent，并在 PR 中注明身份、检查范围、发现及处理结果。GitHub 必需审批由作者之外的有权限账户完成。作者提交的 AI 审阅记录作为证据单独保存。
+CI 负责可执行检查；独立审阅负责设计与实现的对应关系。Agent 的独立审阅使用单独会话或 agent，并在 PR 中注明身份、检查范围、发现及处理结果。当前采用开发者选定的单账号流程：GitHub 强制 PR 和 CI，维护者依独立 AI 审阅证据决定合并。作者发布的 AI 审阅记录明确标注来源，服务器所需的其他账号审批数量为零。
 
 已知问题先登记 issue，区分已观察到的缺陷、待决定的设计和待调查的风险。每个 PR 聚焦一个明确目标；继承问题在 issue 中保留，变更范围以开发者确认的验收标准为准。
 
@@ -47,7 +47,7 @@ git push -u origin fix/config-contract
 gh pr create --base main --head fix/config-contract
 ```
 
-分支落后于 main 时，在工作分支执行 `git fetch origin` 和 `git merge origin/main`，处理冲突并重新验证。新增提交后 CI 重跑，旧审批失效，最终审批覆盖最后一次推送。PR 合并后远端工作分支自动删除；本地 worktree 确认内容已提交后由维护者清理。
+分支落后于 main 时，在工作分支执行 `git fetch origin` 和 `git merge origin/main`，处理冲突并重新验证。新增提交后 CI 重跑，独立审阅补充覆盖新增改动；如有 GitHub 审批，旧审批随新增提交失效。PR 合并后远端工作分支自动删除；本地 worktree 确认内容已提交后由维护者清理。
 
 本地防护使用版本化 hooks，克隆仓库后在仓库内启用：
 
@@ -75,7 +75,7 @@ git config --local push.default simple
 服务器 main 保护定义保存在 `.github/branch-protection.json`，包含：
 
 - 三项必需检查通过，分支基于最新 main。
-- 至少一个作者之外账户审批；最后一次推送取得独立审批，旧审批随新增提交失效。
+- PR 作为统一集成入口，独立 AI 审阅证据由维护者确认；服务器使用零个其他账户审批的单账号模式。
 - 讨论全部解决，提交历史线性。
 - 管理员同样遵守保护，main 的强制推送及删除被阻止。
 

@@ -53,5 +53,5 @@ HTML 在 Chromium 实际打开，验证 77 条观测时间线、模型对象过�
 - 为当前工程建立独立公开远端 `RC-diamond-GH/layer-cake-experiment`；已有 `RC-diamond-GH/Layer-Cake` 保持原状。
 - 引入独立分支与 worktree、PR 证据模板、独立审阅流程和版本化本地 hooks；已知配置契约问题登记为 issue #1。
 - 建立 `Repository policy`、`Rust`、`Lean` 三项 CI，固定工具链、第三方 action 提交和 Elan 下载校验值。
-- 将仓库设置与 main 保护保存为可复用 JSON，集成采用 squash merge，后续变更通过必需检查和独立账户审批。
+- 将仓库设置与 main 保护保存为可复用 JSON，集成采用 squash merge；按开发者选择采用单账号模式，由服务器强制 PR 与必需检查，维护者依独立 AI 审阅证据决定合并。
 - 路径策略及 hooks 的 26 项隔离测试通过，actionlint v1.7.7 验证工作流语法通过。路径检查仅处理 Git 元数据与文件名，真实 `.env` 保持私有。
